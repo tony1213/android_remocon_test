@@ -49,8 +49,10 @@ public class DiscoveryHandler implements ZeroconfDiscoveryHandler {
                 DiscoveredService service = services[0];
                 String result = "[+] Service added: " + service.name + "." + service.type + "." + service.domain + ".";
                 publishProgress(result);
+                android.util.Log.i("zeroconf", result);
             } else {
                 publishProgress("Error - ServiceAddedTask::doInBackground received #services != 1");
+                android.util.Log.i("zeroconf", "Error - ServiceAddedTask::doInBackground received #services != 1");
             }
             return null;
         }
@@ -73,9 +75,11 @@ public class DiscoveryHandler implements ZeroconfDiscoveryHandler {
                     result += "\n    Address: " + address;
                 }
                 publishProgress(result);
+                android.util.Log.i("zeroconf", result);
                 return discovered_service;
             } else {
                 publishProgress("Error - ServiceAddedTask::doInBackground received #services != 1");
+                android.util.Log.i("zeroconf", "Error - ServiceResolvedTask::doInBackground received #services != 1");
             }
             return null;
         }
@@ -112,9 +116,11 @@ public class DiscoveryHandler implements ZeroconfDiscoveryHandler {
                 String result = "[-] Service removed: " + discovered_service.name + "." + discovered_service.type + "." + discovered_service.domain + ".\n";
                 result += "    Port: " + discovered_service.port;
                 publishProgress(result);
+                android.util.Log.i("zeroconf", result);
                 return discovered_service;
             } else {
                 publishProgress("Error - ServiceAddedTask::doInBackground received #services != 1");
+                android.util.Log.i("zeroconf", "Error - ServiceRemovedTask::doInBackground received #services != 1");
             }
             return null;
         }
