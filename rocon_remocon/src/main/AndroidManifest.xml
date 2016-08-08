@@ -44,8 +44,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
+<!--
         <activity android:name=".MasterChooser" />
+-->
+        <activity android:name=".MasterChooserNoui" />
         <activity android:name="com.github.rosjava.android_remocons.rocon_remocon.NfcLauncherActivity"
                   android:label="NFC tag launcher">
             <intent-filter>

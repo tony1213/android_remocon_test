@@ -498,7 +498,7 @@ public class Test extends RosActivity {
 	public void startMasterChooser() {
 		if (!fromApplication && !fromNfcLauncher) {
 			super.startActivityForResult(new Intent(this,
-					MasterChooser.class),
+					MasterChooserNoui.class),
 					CONCERT_MASTER_CHOOSER_REQUEST_CODE);
         }
 	}
@@ -622,7 +622,7 @@ public class Test extends RosActivity {
      */
     public void leaveConcertClicked(View view) {
         availableAppsCache.clear();
-        startActivityForResult(new Intent(this, MasterChooser.class),
+        startActivityForResult(new Intent(this, MasterChooserNoui.class),
                 CONCERT_MASTER_CHOOSER_REQUEST_CODE);
 
         nodeMainExecutorService.shutdownNodeMain(statusPublisher);
