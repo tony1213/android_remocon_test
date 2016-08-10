@@ -64,5 +64,6 @@
                 <action android:name="org.ros.android.NodeMainExecutorService" />
             </intent-filter>
         </service>
+        <service android:name=".MasterChooserNoui"/>
     </application>
 </manifest>

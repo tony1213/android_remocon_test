@@ -98,7 +98,7 @@ public class DiscoveryHandlerNoui implements ZeroconfDiscoveryHandler {
                 }
                 if (index == discovered_services.size()) {
                     discovered_services.add(discovered_service);
-                    discovery_adapter.notifyDataSetChanged();
+                    discovery_adapter.notifyDataSetAdded();
                 } else {
                     android.util.Log.i("zeroconf", "Tried to add an existing service (fix this)");
                 }
@@ -139,7 +139,7 @@ public class DiscoveryHandlerNoui implements ZeroconfDiscoveryHandler {
                 }
                 if (index != discovered_services.size()) {
                     discovered_services.remove(index);
-                    discovery_adapter.notifyDataSetChanged();
+                    discovery_adapter.notifyDataSetRemoved();
                 } else {
                     android.util.Log.i("zeroconf", "Tried to remove a non-existant service");
                 }

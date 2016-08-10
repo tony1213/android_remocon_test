@@ -36,43 +36,25 @@
 
 package com.github.rosjava.android_remocons.rocon_remocon;
 
-import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.Dialog;
-import android.content.ContentValues;
-import android.content.Context;
+import android.app.Service;
+
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.database.Cursor;
-import android.net.Uri;
-import android.os.Bundle;
-import android.text.Spannable;
-import android.text.Spannable.Factory;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.RelativeSizeSpan;
+import android.os.IBinder;
+
 import android.util.Log;
-import android.util.SparseBooleanArray;
-import android.view.KeyEvent;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
-import android.view.View;
-import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemClickListener;
-import android.widget.Button;
-import android.widget.EditText;
+
 import android.widget.ListView;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.github.rosjava.android_remocons.common_tools.master.MasterId;
 import com.github.rosjava.android_remocons.common_tools.master.RoconDescription;
 import com.github.rosjava.android_remocons.common_tools.nfc.NfcReaderActivity;
-import com.github.rosjava.android_remocons.common_tools.zeroconf.MasterSearcher;
+import com.github.rosjava.android_remocons.common_tools.zeroconf.MasterSearcherNoui;
+import com.github.rosjava.android_remocons.common_tools.data.Data;
 import com.github.rosjava.zeroconf_jmdns_suite.jmdns.DiscoveredService;
-import com.google.zxing.IntentIntegrator;
-import com.google.zxing.IntentResult;
+
 
 import org.yaml.snakeyaml.Yaml;
 
@@ -88,8 +70,8 @@ import java.util.TimerTask;
  * A rewrite of ye olde RobotMasterChooser to work with rocon masters (i.e.
  * those that have rocon master info and an interactions manager present).
  */
-public class MasterChooserNoui extends Activity {
-
+public class MasterChooserNoui extends Service {
+	public static final String TAG = "MasterChooserNoui";
 	private static final int ADD_URI_DIALOG_ID = 0;
 	private static final int ADD_DELETION_DIALOG_ID = 1;
 	private static final int ADD_SEARCH_CONCERT_DIALOG_ID = 2;
@@ -99,70 +81,50 @@ public class MasterChooserNoui extends Activity {
 
 	private List<RoconDescription> masters;
 	private boolean[] selections;
-	private MasterSearcher masterSearcher;
+	private MasterSearcherNoui masterSearcher;
 	private ListView listView;
     private Yaml yaml = new Yaml();
+	private ArrayList<DiscoveredService> discoveredMasters;
+    private Data data;
 
-    public MasterChooserNoui() {
+	@Override
+	public IBinder onBind(Intent intent) {
+		return null;
+	}
+
+	@Override
+	public void onCreate() {
+		super.onCreate();
+		Log.d(TAG, "onCreate() executed");
+		masters = new ArrayList<RoconDescription>();
+		data = new Data();
+		masterSearcher = new MasterSearcherNoui(this, discoveredMasters, "concert-master", data);
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				Log.d(TAG, "onCreate() Begin search.");
+				data.Wait();
+				Log.d(TAG, "onCreate() Finish search.");
+				for (int i = 0; i < data.getDiscoveredServices().size(); i++) {
+					enterMasterInfo((DiscoveredService) data.getDiscoveredServices().get(i));
+				}
+				new MasterAdapterNoui(MasterChooserNoui.this, masters);
+				choose(0);
+			}
+		}).start();
+//		updateListView();
+	}
+
+	public MasterChooserNoui() {
 		masters = new ArrayList<RoconDescription>();
 	}
 
-	private void readMasterList() {
-		String str = null;
-		Cursor c = getContentResolver().query(
-				Database.CONTENT_URI, null, null, null, null);
-		if (c == null) {
-			masters = new ArrayList<RoconDescription>();
-			Log.e("Remocon", "master chooser provider failed!!!");
-			return;
-		}
-		if (c.getCount() > 0) {
-			c.moveToFirst();
-			str = c.getString(c.getColumnIndex(Database.TABLE_COLUMN));
-			Log.i("Remocon", "master chooser found a rocon master: " + str);
-		}
-		if (str != null) {
-			masters = (List<RoconDescription>) yaml.load(str);
-		} else {
-			masters = new ArrayList<RoconDescription>();
-		}
-	}
-
-	public void writeMasterList() {
-		Log.i("Remocon", "master chooser saving rocon master details...");
-		String str = null;
-		final List<RoconDescription> tmp = masters; // Avoid race conditions
-        if (tmp != null) {
-            str = yaml.dump(tmp);
-		}
-		ContentValues cv = new ContentValues();
-		cv.put(Database.TABLE_COLUMN, str);
-		Uri newEmp = getContentResolver().insert(Database.CONTENT_URI, cv);
-		if (newEmp != Database.CONTENT_URI) {
-			Log.e("Remocon", "master chooser could not save concert, non-equal URI's");
-		}
-	}
-
-	private void refresh() {
-		readMasterList();
-		updateListView();
-	}
-
+/*
 	private void updateListView() {
-		setContentView(R.layout.master_chooser);
-		ListView listview = (ListView) findViewById(R.id.master_list);
-		listview.setAdapter(new MasterAdapterNoui(this, masters));
-		registerForContextMenu(listview);
+		new MasterAdapterNoui(this, masters);
 
-		listview.setOnItemClickListener(new OnItemClickListener() {
-			@Override
-			public void onItemClick(AdapterView<?> parent, View v,
-					int position, long id) {
-				choose(position);
-			}
-		});
 	}
-
+*/
     /**
      * Called when the user clicks on one of the listed masters in master chooser
      * view. Should probably check the connection status before
@@ -175,34 +137,12 @@ public class MasterChooserNoui extends Activity {
 		RoconDescription concert = masters.get(position);
 		if (concert == null || concert.getConnectionStatus() == null
 				|| concert.getConnectionStatus().equals(RoconDescription.ERROR)) {
-			AlertDialog d = new AlertDialog.Builder(MasterChooserNoui.this)
-					.setTitle("Error!")
-					.setCancelable(false)
-					.setMessage("Failed: Cannot contact concert")
-					.setNeutralButton("OK",
-							new DialogInterface.OnClickListener() {
-								public void onClick(DialogInterface dialog,
-										int which) {
-								}
-							}).create();
-			d.show();
+			Log.i("MasterChooser", "Error! Failed: Cannot contact concert");
         } else if ( concert.getConnectionStatus().equals(RoconDescription.UNAVAILABLE) ) {
-            AlertDialog d = new AlertDialog.Builder(MasterChooserNoui.this)
-                    .setTitle("Master Unavailable!")
-                    .setCancelable(false)
-                    .setMessage("Currently busy serving another.")
-                    .setNeutralButton("OK",
-                            new DialogInterface.OnClickListener() {
-                                public void onClick(DialogInterface dialog,
-                                                    int which) {
-                                }
-                            }).create();
-            d.show();
+			Log.i("MasterChooser", "Master Unavailable! Currently busy serving another.");
         } else {
             Intent resultIntent = new Intent();
             resultIntent.putExtra(RoconDescription.UNIQUE_KEY, concert);
-            setResult(RESULT_OK, resultIntent);
-            finish();
 		}
 	}
 
@@ -221,8 +161,7 @@ public class MasterChooserNoui extends Activity {
 						choose(i);
 						return;
 					} else {
-						Toast.makeText(this, "That concert is already listed.",
-								Toast.LENGTH_SHORT).show();
+						Log.i("MasterChooserActivity", "That concert is already listed.");
 						return;
 					}
 				}
@@ -236,8 +175,8 @@ public class MasterChooserNoui extends Activity {
 	}
 
 	private void onMastersChanged() {
-		writeMasterList();
-		updateListView();
+//		writeMasterList();
+//		updateListView();
 	}
 
 	private void deleteAllMasters() {
@@ -255,224 +194,6 @@ public class MasterChooserNoui extends Activity {
 			}
 		}
 		onMastersChanged();
-	}
-
-	private void deleteUnresponsiveMasters() {
-		Iterator<RoconDescription> iter = masters.iterator();
-		while (iter.hasNext()) {
-			RoconDescription concert = iter.next();
-			if (concert == null || concert.getConnectionStatus() == null
-					|| concert.getConnectionStatus().equals(RoconDescription.ERROR)) {
-				Log.i("Remocon", "concert master chooser removing concert with connection status '"
-						+ concert.getConnectionStatus() + "'");
-				iter.remove();
-			}
-		}
-		onMastersChanged();
-	}
-
-	@Override
-	protected void onCreate(Bundle savedInstanceState) {
-		super.onCreate(savedInstanceState);
-		readMasterList();
-		updateListView();
-
-	}
-
-	@Override
-	public void onActivityResult(int requestCode, int resultCode, Intent intent) {
-        // Sub-activity to gather concert connection data completed: can be QR code or NFC tag scan
-        // TODO: cannot unify both calls?
-
-        if (resultCode == RESULT_CANCELED) {
-            Toast.makeText(this, "Cancelled", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        Map<String, Object> data = null;
-        if (requestCode == QR_CODE_SCAN_REQUEST_CODE) {
-            IntentResult scanResult = IntentIntegrator.parseActivityResult(
-                    requestCode, resultCode, intent);
-            if (scanResult != null && scanResult.getContents() != null) {
-                Yaml yaml = new Yaml();
-                String scanned_data = scanResult.getContents().toString();
-                data = (Map<String, Object>) yaml.load(scanned_data);
-            }
-        }
-        else if (requestCode == NFC_TAG_SCAN_REQUEST_CODE && resultCode == RESULT_OK) {
-            if (intent.hasExtra("tag_data")) {
-                data = (Map<String, Object>) intent.getExtras().getSerializable("tag_data");
-            }
-        }
-        else {
-            Log.w("Remocon", "Unknown activity request code: " + requestCode);
-            return;
-        }
-
-        if (data == null) {
-            Toast.makeText(this, "Scan failed", Toast.LENGTH_SHORT).show();
-        }
-        else {
-            try {
-                Log.d("Remocon", "master chooser OBJECT: " + data.toString());
-                addMaster(new MasterId(data), false);
-            } catch (Exception e) {
-                Toast.makeText(this, "invalid rocon master description: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
-
-	@Override
-	protected Dialog onCreateDialog(int id) {
-		readMasterList();
-		final Dialog dialog;
-		Button button;
-		AlertDialog.Builder builder;
-		switch (id) {
-		case ADD_URI_DIALOG_ID:
-			dialog = new Dialog(this);
-			dialog.setContentView(R.layout.add_uri_dialog);
-			dialog.setTitle("Add a Master");
-			dialog.setOnKeyListener(new DialogKeyListener());
-			EditText uriField = (EditText) dialog.findViewById(R.id.uri_editor);
-			uriField.setText("http://localhost:11311/",
-					TextView.BufferType.EDITABLE);
-			button = (Button) dialog.findViewById(R.id.enter_button);
-			button.setOnClickListener(new View.OnClickListener() {
-				public void onClick(View v) {
-					enterMasterInfo(dialog);
-					removeDialog(ADD_URI_DIALOG_ID);
-				}
-			});
-            button = (Button) dialog.findViewById(R.id.qr_code_button);
-            button.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    scanQRCodeClicked(v);
-                }
-            });
-            button = (Button) dialog.findViewById(R.id.nfc_tag_button);
-            button.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    scanNFCTagClicked(v);
-                }
-            });
-			button = (Button) dialog.findViewById(R.id.search_master_button);
-			button.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					searchMasterClicked(v);
-				}
-			});
-
-			button = (Button) dialog.findViewById(R.id.cancel_button);
-			button.setOnClickListener(new View.OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					removeDialog(ADD_URI_DIALOG_ID);
-				}
-			});
-			break;
-		case ADD_DELETION_DIALOG_ID:
-			builder = new AlertDialog.Builder(this);
-			String newline = System.getProperty("line.separator");
-			if (masters.size() > 0) {
-				selections = new boolean[masters.size()];
-				Spannable[] concert_names = new Spannable[masters.size()];
-				Spannable name;
-				for (int i = 0; i < masters.size(); i++) {
-					name = Factory.getInstance().newSpannable(
-							masters.get(i).getMasterName() + newline + masters.get(i).getMasterId());
-					name.setSpan(new ForegroundColorSpan(0xff888888),
-                            masters.get(i).getMasterName().length(), name.length(),
-							Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-					name.setSpan(new RelativeSizeSpan(0.8f),
-                            masters.get(i).getMasterName().length(), name.length(),
-							Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-					concert_names[i] = name;
-				}
-				builder.setTitle("Delete a concert");
-				builder.setMultiChoiceItems(concert_names, selections,
-						new DialogSelectionClickHandler());
-				builder.setPositiveButton("Delete Selections",
-						new DeletionDialogButtonClickHandler());
-				builder.setNegativeButton("Cancel",
-						new DeletionDialogButtonClickHandler());
-				dialog = builder.create();
-			} else {
-				builder.setTitle("No masters to delete.");
-				dialog = builder.create();
-				final Timer t = new Timer();
-				t.schedule(new TimerTask() {
-					public void run() {
-						removeDialog(ADD_DELETION_DIALOG_ID);
-					}
-				}, 2 * 1000);
-			}
-			break;
-		case ADD_SEARCH_CONCERT_DIALOG_ID:
-			builder = new AlertDialog.Builder(this);
-			builder.setTitle("Scanning on the local network...");
-			LayoutInflater layoutInflater = (LayoutInflater) getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-			listView = (ListView) layoutInflater.inflate(R.layout.zeroconf_master_list, null);
-			masterSearcher = new MasterSearcher(this, listView, "concert-master", R.drawable.conductor, R.drawable.turtle);
-			builder.setView(listView);
-			builder.setPositiveButton("Select", new SearchMasterDialogButtonClickHandler());
-			builder.setNegativeButton("Cancel", new SearchMasterDialogButtonClickHandler());
-			dialog = builder.create();
-			dialog.setOnKeyListener(new DialogKeyListener());
-			break;
-		default:
-			dialog = null;
-		}
-		return dialog;
-	}
-
-	public class DialogSelectionClickHandler implements
-			DialogInterface.OnMultiChoiceClickListener {
-		public void onClick(DialogInterface dialog, int clicked,
-				boolean selected) {
-			return;
-		}
-	}
-
-	public class DeletionDialogButtonClickHandler implements
-			DialogInterface.OnClickListener {
-		public void onClick(DialogInterface dialog, int clicked) {
-			switch (clicked) {
-			case DialogInterface.BUTTON_POSITIVE:
-				deleteSelectedMasters(selections);
-				removeDialog(ADD_DELETION_DIALOG_ID);
-				break;
-			case DialogInterface.BUTTON_NEGATIVE:
-				removeDialog(ADD_DELETION_DIALOG_ID);
-				break;
-			}
-		}
-	}
-
-	public class SearchMasterDialogButtonClickHandler implements
-			DialogInterface.OnClickListener {
-		public void onClick(DialogInterface dialog, int clicked) {
-			switch (clicked) {
-			case DialogInterface.BUTTON_POSITIVE:
-				SparseBooleanArray positions = listView
-						.getCheckedItemPositions();
-
-				for (int i = 0; i < positions.size(); i++) {
-					if (positions.valueAt(i)) {
-						enterMasterInfo((DiscoveredService) listView.getAdapter()
-                                .getItem(positions.keyAt(i)));
-					}
-				}
-				removeDialog(ADD_DELETION_DIALOG_ID);
-				break;
-			case DialogInterface.BUTTON_NEGATIVE:
-				removeDialog(ADD_DELETION_DIALOG_ID);
-				break;
-			}
-		}
 	}
 
 	public void enterMasterInfo(DiscoveredService discovered_service) {
@@ -493,116 +214,11 @@ public class MasterChooserNoui extends Activity {
             try {
                 addMaster(new MasterId(data));
             } catch (Exception e) {
-                Toast.makeText(MasterChooserNoui.this, "Invalid Parameters.",
-                        Toast.LENGTH_SHORT).show();
+				android.util.Log.i("Remocon", "Invalid Parameters.");
             }
         } else {
-            Toast.makeText(MasterChooserNoui.this, "No valid resolvable master URI.",
-                    Toast.LENGTH_SHORT).show();
+			android.util.Log.i("Remocon", "No valid resolvable master URI.");
         }
 	}
 
-	public void enterMasterInfo(Dialog dialog) {
-		EditText uriField = (EditText) dialog.findViewById(R.id.uri_editor);
-		String newMasterUri = uriField.getText().toString();
-		EditText wifiNameField = (EditText) dialog
-				.findViewById(R.id.wifi_name_editor);
-		String newWifiName = wifiNameField.getText().toString();
-		EditText wifiPasswordField = (EditText) dialog
-				.findViewById(R.id.wifi_password_editor);
-		String newWifiPassword = wifiPasswordField.getText().toString();
-		if (newMasterUri != null && newMasterUri.length() > 0) {
-			Map<String, Object> data = new HashMap<String, Object>();
-			data.put("URL", newMasterUri);
-			if (newWifiName != null && newWifiName.length() > 0) {
-				data.put("WIFI", newWifiName);
-			}
-			if (newWifiPassword != null && newWifiPassword.length() > 0) {
-				data.put("WIFIPW", newWifiPassword);
-			}
-			try {
-				addMaster(new MasterId(data));
-			} catch (Exception e) {
-				Toast.makeText(MasterChooserNoui.this, "Invalid Parameters.",
-						Toast.LENGTH_SHORT).show();
-			}
-		} else {
-			Toast.makeText(MasterChooserNoui.this, "Must specify Master URI.",
-					Toast.LENGTH_SHORT).show();
-		}
-	}
-
-	public class DialogKeyListener implements DialogInterface.OnKeyListener {
-		@Override
-		public boolean onKey(DialogInterface dialog, int keyCode, KeyEvent event) {
-			if (event.getAction() == KeyEvent.ACTION_DOWN
-					&& keyCode == KeyEvent.KEYCODE_ENTER) {
-				Dialog dlg = (Dialog) dialog;
-				enterMasterInfo(dlg);
-				removeDialog(ADD_URI_DIALOG_ID);
-				return true;
-			}
-			return false;
-		}
-	}
-
-	public void addMasterClicked(View view) {
-		showDialog(ADD_URI_DIALOG_ID);
-	}
-
-	public void refreshClicked(View view) {
-		refresh();
-	}
-
-    public void scanQRCodeClicked(View view) {
-        dismissDialog(ADD_URI_DIALOG_ID);
-        IntentIntegrator.initiateScan(this, IntentIntegrator.DEFAULT_TITLE,
-                IntentIntegrator.DEFAULT_MESSAGE, IntentIntegrator.DEFAULT_YES,
-                IntentIntegrator.DEFAULT_NO, IntentIntegrator.QR_CODE_TYPES);
-    }
-
-    public void scanNFCTagClicked(View view) {
-        dismissDialog(ADD_URI_DIALOG_ID);
-        Intent i = new Intent(this, NfcReaderActivity.class);
-        // Set the request code so we can identify the callback via this code
-        startActivityForResult(i, NFC_TAG_SCAN_REQUEST_CODE);
-    }
-
-	public void searchMasterClicked(View view) {
-		removeDialog(ADD_URI_DIALOG_ID);
-		showDialog(ADD_SEARCH_CONCERT_DIALOG_ID);
-
-	}
-
-	@Override
-	public boolean onCreateOptionsMenu(Menu menu) {
-		MenuInflater inflater = getMenuInflater();
-		inflater.inflate(R.menu.master_chooser_option_menu, menu);
-		return true;
-	}
-
-	@Override
-	public boolean onOptionsItemSelected(MenuItem item) {
-		int id = item.getItemId();
-		if (id == R.id.add_concert) {
-			showDialog(ADD_URI_DIALOG_ID);
-			return true;
-		} else if (id == R.id.delete_selected) {
-			showDialog(ADD_DELETION_DIALOG_ID);
-			return true;
-		} else if (id == R.id.delete_unresponsive) {
-			deleteUnresponsiveMasters();
-			return true;
-		} else if (id == R.id.delete_all) {
-			deleteAllMasters();
-			return true;
-		} else if (id == R.id.kill) {
-			Intent intent = new Intent();
-			setResult(RESULT_CANCELED, intent);
-			finish();
-			return true;
-		} else {
-			return super.onOptionsItemSelected(item);
-		}
-	}
 }

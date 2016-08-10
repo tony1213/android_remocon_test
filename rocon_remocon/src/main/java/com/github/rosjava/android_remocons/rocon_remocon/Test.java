@@ -37,12 +37,17 @@
 package com.github.rosjava.android_remocons.rocon_remocon;
 
 import android.app.AlertDialog;
+import android.app.Service;
+import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
+import android.os.Binder;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -497,9 +502,7 @@ public class Test extends RosActivity {
 	@Override
 	public void startMasterChooser() {
 		if (!fromApplication && !fromNfcLauncher) {
-			super.startActivityForResult(new Intent(this,
-					MasterChooserNoui.class),
-					CONCERT_MASTER_CHOOSER_REQUEST_CODE);
+            startService(new Intent(this, MasterChooserNoui.class));
         }
 	}
 
@@ -615,43 +618,10 @@ public class Test extends RosActivity {
         chooseRole();
     }
 
-    /**
-     * This returns the activity to the concert master chooser
-     * activity. It will get triggered via either a backpress
-     * or the button provided in the Remocon activity.
-     */
-    public void leaveConcertClicked(View view) {
-        availableAppsCache.clear();
-        startActivityForResult(new Intent(this, MasterChooserNoui.class),
-                CONCERT_MASTER_CHOOSER_REQUEST_CODE);
-
-        nodeMainExecutorService.shutdownNodeMain(statusPublisher);
-        nodeMainExecutorService.shutdownNodeMain(pairSubscriber);
-
-        interactionsManager.shutdown();
-    }
 
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		menu.add(0, 0, 0, R.string.exit);
 		return super.onCreateOptionsMenu(menu);
 	}
-
-	@Override
-	public boolean onOptionsItemSelected(MenuItem item) {
-		super.onOptionsItemSelected(item);
-		switch (item.getItemId()) {
-		case 0:
-			finish();
-			break;
-		}
-		return true;
-	}
-
-    @Override
-    public void onBackPressed() {
-        Log.i("Test", "Press Back Button");
-        leaveConcertClicked(null);
-    }
-
 }

@@ -21,6 +21,7 @@ import android.widget.ListView;
 
 import com.github.rosjava.zeroconf_jmdns_suite.jmdns.DiscoveredService;
 import com.github.rosjava.zeroconf_jmdns_suite.jmdns.Zeroconf;
+import com.github.rosjava.android_remocons.common_tools.data.Data;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -34,16 +35,13 @@ public class MasterSearcherNoui {
     private DiscoveryHandlerNoui discoveryHandler;
     private Logger logger;
 
-    public MasterSearcherNoui(Context context, final ListView listView,
-                          String targetServiceName, int targetServiceDrawable, int otherServicesDrawable) {
+    public MasterSearcherNoui(Context context, final ArrayList<DiscoveredService> ServiceList,
+                          String targetServiceName, Data data) {
 
         discoveredMasters = new ArrayList<DiscoveredService>();
 
         discoveryAdapter = new DiscoveryAdapterNoui(context, discoveredMasters,
-                                 targetServiceName, targetServiceDrawable, otherServicesDrawable);
-        listView.setAdapter(discoveryAdapter);
-        listView.setItemsCanFocus(false);
-        listView.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
+                                 targetServiceName, data);
 
         logger = new Logger();
         zeroconf = new Zeroconf(logger);
