@@ -38,9 +38,12 @@ package com.github.rosjava.android_remocons.rocon_remocon;
 
 import android.app.AlertDialog;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
@@ -129,6 +132,7 @@ public class Test extends RosActivity {
      */
     private boolean fromApplication = false;  // true if it is a remocon activity getting control from a closing app
     private boolean fromNfcLauncher = false;  // true if it is a remocon activity started by NfcLauncherActivity
+    private TestReceiver testReceiver;
 
     public Test() {
         super("Test", "Test");
@@ -183,7 +187,13 @@ public class Test extends RosActivity {
         super.onStart();
     }
 
-	/** Called when the activity is first created. */
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        unregisterReceiver(testReceiver);
+    }
+
+    /** Called when the activity is first created. */
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -192,7 +202,15 @@ public class Test extends RosActivity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                              WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.rocon_remocon);
-		concertNameView = (TextView) findViewById(R.id.concert_name_view);
+
+        testReceiver=new TestReceiver();
+        IntentFilter filter=new IntentFilter();
+        filter.addAction("com.github.rosjava.android_remocons.rocon_remocon.MasterChooserNouiBroadcast");
+        registerReceiver(testReceiver,filter);
+
+
+
+//		concertNameView = (TextView) findViewById(R.id.concert_name_view);
         // Prepare the app manager; we do here instead of on init to keep using the same instance when switching roles
         interactionsManager = new InteractionsManager(
                 new InteractionsManager.FailureHandler() {
@@ -403,6 +421,7 @@ public class Test extends RosActivity {
             Log.e("Test", "Cannot get concert description from intent. " + e.getMessage());
             throw new RosRuntimeException(e);
         } catch (URISyntaxException e) {
+            Log.e("Test", "URISyntaxException. " + e.getMessage());
             throw new RosRuntimeException(e);
         }
         nodeMainExecutorService.setMasterUri(uri);
@@ -435,61 +454,35 @@ public class Test extends RosActivity {
         Log.i("Test", "concert chosen; show choose user role dialog");
         roconDescription.setCurrentRole(-1);
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(Test.this);
-        builder.setTitle("Choose your role");
-        builder.setSingleChoiceItems(roconDescription.getUserRoles(), -1,
-                new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int selectedRole) {
-                        roconDescription.setCurrentRole(selectedRole);
-                        String role = roconDescription.getCurrentRole();
-                        Toast.makeText(Test.this, role + " selected", Toast.LENGTH_SHORT).show();
-                        dialog.dismiss();
+        CharSequence[] items = roconDescription.getUserRoles();
+        roconDescription.setCurrentRole(0);//Android Pair
+        String role = roconDescription.getCurrentRole();
+        new AsyncTask<Void, Void, Void>() {
+            @Override
+            protected Void doInBackground(Void... params) {
+                while (!validatedConcert) {
+                    // should use a sleep here to avoid burnout
+                    try { Thread.sleep(200); } catch (InterruptedException e) { e.printStackTrace(); }
+                }
+                Test.this.init(nodeMainExecutorService);
+                return null;
+            }
+        }.execute();
 
-                        new AsyncTask<Void, Void, Void>() {
-                            @Override
-                            protected Void doInBackground(Void... params) {
-                                while (!validatedConcert) {
-                                    // should use a sleep here to avoid burnout
-                                    try { Thread.sleep(200); } catch (InterruptedException e) { e.printStackTrace(); }
-                                }
-                                Test.this.init(nodeMainExecutorService);
-                                return null;
-                            }
-                        }.execute();
-                    }
-                });
-        AlertDialog alert = builder.create();
-        alert.show();
     }
 
-    /**
-     * The main result gathered here is that from the concert master chooser
-     * which is started on top of the initial Remocon Activity.
-     * This proceeds to then set the uri and trigger the init() calls.
-     *
-     * @param requestCode
-     * @param resultCode
-     * @param data
-     */
-	@Override
-	public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        Log.i("Test", "onActivityResult [" + requestCode + "][" + resultCode + "]");
-		if (resultCode == RESULT_CANCELED) {
-            Log.i("Test", "activityResult...RESULT_CANCELLED");
-			finish();
-		} else if (resultCode == RESULT_OK) {
-            Log.i("Test", "activityResult...RESULT_OK");
-			if (requestCode == CONCERT_MASTER_CHOOSER_REQUEST_CODE) {
-                init(data);
-            } else {
-				// Without a master URI configured, we are in an unusable state.
-				nodeMainExecutorService.shutdown();
-				finish();
-			}
-		} else {
-            Log.w("Test", "activityResult...??? [" + resultCode + "]");
+    public class TestReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Log.i("TestReceiver", "onReceive");
+//            Toast.makeText(context, "Intent Detected.", Toast.LENGTH_LONG).show();
+            onResult(intent);
         }
+    }
+
+	public void onResult(Intent data) {
+        Log.i("Test", "onResult...RESULT_OK");
+        init(data);
 	}
 
     /**
@@ -502,7 +495,10 @@ public class Test extends RosActivity {
 	@Override
 	public void startMasterChooser() {
 		if (!fromApplication && !fromNfcLauncher) {
-            startService(new Intent(this, MasterChooserNoui.class));
+//            startService(new Intent(this, MasterChooserNoui.class));
+            Intent intent = new Intent();
+            intent.setAction("com.github.rosjava.android_remocons.rocon_remocon.MasterChooserNoui");
+            startService(intent);
         }
 	}
 
@@ -592,6 +588,7 @@ public class Test extends RosActivity {
 	protected void updateAppList(final ArrayList<Interaction> apps, final String master_name, final String role) {
 		Log.d("Test", "updating app list gridview");
         selectedInteraction = null;
+/*
         concertNameView.setText(master_name + " - " + role);
 		GridView gridview = (GridView) findViewById(R.id.gridview);
 		AppAdapter appAdapter = new AppAdapter(Test.this, apps);
@@ -608,6 +605,7 @@ public class Test extends RosActivity {
 
 			}
 		});
+*/
 		Log.d("Test", "app list gridview updated");
 	}
 

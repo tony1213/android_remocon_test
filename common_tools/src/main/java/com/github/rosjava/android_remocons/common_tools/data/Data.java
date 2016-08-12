@@ -6,24 +6,24 @@ import java.util.ArrayList;
 
 public class Data {
     private ArrayList<DiscoveredService> discoveredServices;
-    private Object mutex;
+    private Object sync;
 
     public Data() {
-        mutex = new Object();
+        sync = new Object();
     }
 
     public void Wait() {
-        synchronized (mutex) {
+        synchronized (sync) {
             try {
-                mutex.wait();
+                sync.wait();
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
     }
     public void Notify() {
-        synchronized (mutex) {
-            mutex.notify();
+        synchronized (sync) {
+            sync.notify();
         }
     }
 

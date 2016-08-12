@@ -41,16 +41,14 @@ import android.app.Service;
 
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.os.Bundle;
 import android.os.IBinder;
 
 import android.util.Log;
 
-import android.widget.ListView;
-import android.widget.Toast;
 
 import com.github.rosjava.android_remocons.common_tools.master.MasterId;
 import com.github.rosjava.android_remocons.common_tools.master.RoconDescription;
-import com.github.rosjava.android_remocons.common_tools.nfc.NfcReaderActivity;
 import com.github.rosjava.android_remocons.common_tools.zeroconf.MasterSearcherNoui;
 import com.github.rosjava.android_remocons.common_tools.data.Data;
 import com.github.rosjava.zeroconf_jmdns_suite.jmdns.DiscoveredService;
@@ -82,7 +80,7 @@ public class MasterChooserNoui extends Service {
 	private List<RoconDescription> masters;
 	private boolean[] selections;
 	private MasterSearcherNoui masterSearcher;
-	private ListView listView;
+
     private Yaml yaml = new Yaml();
 	private ArrayList<DiscoveredService> discoveredMasters;
     private Data data;
@@ -102,29 +100,35 @@ public class MasterChooserNoui extends Service {
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
+				int index = 0;
 				Log.d(TAG, "onCreate() Begin search.");
 				data.Wait();
 				Log.d(TAG, "onCreate() Finish search.");
 				for (int i = 0; i < data.getDiscoveredServices().size(); i++) {
 					enterMasterInfo((DiscoveredService) data.getDiscoveredServices().get(i));
+					//FIXME!
+					if (data.getDiscoveredServices().get(i).ipv4_addresses.get(0).equals("192.168.2.191") )
+						index = i;
 				}
-				new MasterAdapterNoui(MasterChooserNoui.this, masters);
-				choose(0);
+				//FIXME! I just choosed the first item.
+				choose(index);
 			}
 		}).start();
-//		updateListView();
 	}
 
 	public MasterChooserNoui() {
 		masters = new ArrayList<RoconDescription>();
 	}
 
-/*
-	private void updateListView() {
-		new MasterAdapterNoui(this, masters);
-
+	// broadcast a custom intent.
+	private void broadcastIntent(RoconDescription concert){
+		Intent intent = new Intent();
+		intent.putExtra(RoconDescription.UNIQUE_KEY, concert);
+		intent.setAction("com.github.rosjava.android_remocons.rocon_remocon.MasterChooserNouiBroadcast");
+		sendBroadcast(intent);
 	}
-*/
+
+
     /**
      * Called when the user clicks on one of the listed masters in master chooser
      * view. Should probably check the connection status before
@@ -141,8 +145,9 @@ public class MasterChooserNoui extends Service {
         } else if ( concert.getConnectionStatus().equals(RoconDescription.UNAVAILABLE) ) {
 			Log.i("MasterChooser", "Master Unavailable! Currently busy serving another.");
         } else {
-            Intent resultIntent = new Intent();
-            resultIntent.putExtra(RoconDescription.UNIQUE_KEY, concert);
+            //Intent resultIntent = new Intent();
+            //resultIntent.putExtra(RoconDescription.UNIQUE_KEY, concert);
+			broadcastIntent(concert);
 		}
 	}
 
@@ -175,25 +180,11 @@ public class MasterChooserNoui extends Service {
 	}
 
 	private void onMastersChanged() {
-//		writeMasterList();
-//		updateListView();
+		updateList();
 	}
 
-	private void deleteAllMasters() {
-		masters.clear();
-		onMastersChanged();
-	}
-
-	private void deleteSelectedMasters(boolean[] array) {
-		int j = 0;
-		for (int i = 0; i < array.length; i++) {
-			if (array[i]) {
-				masters.remove(j);
-			} else {
-				j++;
-			}
-		}
-		onMastersChanged();
+	private void updateList() {
+		new MasterAdapterNoui(this, masters);
 	}
 
 	public void enterMasterInfo(DiscoveredService discovered_service) {

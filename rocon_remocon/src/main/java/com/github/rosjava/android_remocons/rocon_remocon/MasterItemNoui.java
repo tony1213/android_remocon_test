@@ -67,6 +67,7 @@ public class MasterItemNoui implements ConcertChecker.ConcertDescriptionReceiver
     private RoconDescription description;
     private MasterChooserNoui parentMca;
     private String errorReason;
+    private Object sync;
 
     public MasterItemNoui(RoconDescription roconDescription, MasterChooserNoui parentMca) {
         errorReason = "";
@@ -76,7 +77,15 @@ public class MasterItemNoui implements ConcertChecker.ConcertDescriptionReceiver
         if (WifiChecker.wifiValid(this.description.getMasterId(),
                 (WifiManager) parentMca.getSystemService(parentMca.WIFI_SERVICE))) {
             checker = new ConcertChecker(this, this);
-            checker.beginChecking(this.description.getMasterId());
+            sync = new Object();
+            synchronized (sync) {
+                try {
+                    checker.beginChecking(this.description.getMasterId());
+                    sync.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
         } else {
             errorReason = "Wrong WiFi Network";
             description.setConnectionStatus(RoconDescription.WIFI);
@@ -96,6 +105,9 @@ public class MasterItemNoui implements ConcertChecker.ConcertDescriptionReceiver
     public void receive(RoconDescription roconDescription) {
         description.copyFrom(roconDescription);
         safePopulateView();
+        synchronized (sync) {
+            sync.notify();
+        }
     }
 
     @Override
@@ -103,6 +115,9 @@ public class MasterItemNoui implements ConcertChecker.ConcertDescriptionReceiver
         errorReason = reason;
         description.setConnectionStatus(RoconDescription.ERROR);
         safePopulateView();
+        synchronized (sync) {
+            sync.notify();
+        }
     }
 
     public View getView(Context context, View convert_view, ViewGroup parent) {
