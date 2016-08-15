@@ -115,7 +115,7 @@ public class Test extends RosActivity {
     private TextView concertNameView;
 	private Button leaveConcertButton;
     private LaunchInteractionDialog launchInteractionDialog;
-    private ProgressDialogWrapper progressDialog;
+//    private ProgressDialogWrapper progressDialog;
 	private AlertDialogWrapper wifiDialog;
 	private AlertDialogWrapper evictDialog;
 	private AlertDialogWrapper errorDialog;
@@ -230,7 +230,7 @@ public class Test extends RosActivity {
                         @Override
                         public void run() {
                             updateAppList(availableAppsCache, roconDescription.getMasterName(), roconDescription.getCurrentRole());
-                            progressDialog.dismiss();
+                            //progressDialog.dismiss();
                         }
                     });
                 } else {
@@ -242,7 +242,7 @@ public class Test extends RosActivity {
 
             @Override
             public void onFailure(RemoteException e) {
-                progressDialog.dismiss();
+                //progressDialog.dismiss();
                 Log.e("Test", "retrieve interactions for the role '"
                         + roconDescription.getCurrentRole() + "' failed: " + e.getMessage());
             }
@@ -256,7 +256,7 @@ public class Test extends RosActivity {
                 final String reason = response.getMessage();
 
                 boolean ret_launcher_dialog = false;
-                progressDialog.dismiss();
+                //progressDialog.dismiss();
 
                 if(AppLauncher.checkAppType(selectedInteraction.getName()) == AppLauncher.AppType.NOTHING){
                     pairSubscriber.setAppHash(selectedInteraction.getHash());
@@ -344,7 +344,7 @@ public class Test extends RosActivity {
 
             @Override
             public void onFailure(RemoteException e) {
-                progressDialog.dismiss();
+                //progressDialog.dismiss();
                 Log.e("Test", "Retrieve rapps for role "
                         + roconDescription.getCurrentRole() + " failed: " + e.getMessage());
             }
@@ -376,8 +376,9 @@ public class Test extends RosActivity {
             interactionsManager.init(roconDescription.getInteractionsNamespace());
             interactionsManager.getAppsForRole(roconDescription.getMasterId(), roconDescription.getCurrentRole());
             interactionsManager.setRemoconName(statusPublisher.REMOCON_FULL_NAME);
-            progressDialog.show("Getting apps...",
-                    "Retrieving interactions for the '" + roconDescription.getCurrentRole() + "' role");
+            //progressDialog.show("Getting apps...",
+            //        "Retrieving interactions for the '" + roconDescription.getCurrentRole() + "' role");
+            Log.i("Test", "Getting apps... Retrieving interactions for the " + roconDescription.getCurrentRole() + " role");
             //execution of publisher
             if (! statusPublisher.isInitialized()) {
                 // If we come back from an app, it should be already initialized, so call execute again would crash
@@ -513,7 +514,7 @@ public class Test extends RosActivity {
 		errorDialog = new AlertDialogWrapper(this,
 				new AlertDialog.Builder(this).setTitle("Could Not Connect")
 						.setCancelable(false), "Ok");
-		progressDialog = new ProgressDialogWrapper(this);
+		//progressDialog = new ProgressDialogWrapper(this);
 		final AlertDialogWrapper wifiDialog = new AlertDialogWrapper(this,
 				new AlertDialog.Builder(this).setTitle("Change Wifi?")
 						.setCancelable(false), "Yes", "No");
@@ -522,7 +523,7 @@ public class Test extends RosActivity {
 		final ConcertChecker cc = new ConcertChecker(
 				new ConcertChecker.ConcertDescriptionReceiver() {
 					public void receive(RoconDescription concertDescription) {
-                        progressDialog.dismiss();
+                        //progressDialog.dismiss();
                         if(!fromApplication) {
                             // Check that it's not busy
                             if ( concertDescription.getConnectionStatus() == RoconDescription.UNAVAILABLE ) {
@@ -543,7 +544,7 @@ public class Test extends RosActivity {
 					public void handleFailure(String reason) {
 						final String reason2 = reason;
                         // Kill the connecting to ros master dialog.
-                        progressDialog.dismiss();
+                        //progressDialog.dismiss();
                         errorDialog.show("Cannot contact ROS master: " + reason2);
 						errorDialog.dismiss();
                         // TODO : gracefully abort back to the concert master chooser instead.
@@ -555,20 +556,21 @@ public class Test extends RosActivity {
 		final WifiChecker wc = new WifiChecker(
 				new WifiChecker.SuccessHandler() {
 					public void handleSuccess() {
-                        progressDialog.show("Checking...", "Starting connection process");
+                        //progressDialog.show("Checking...", "Starting connection process");
+                        Log.i("Test", "Checking... Starting connection process");
 						cc.beginChecking(id);
 					}
 				}, new WifiChecker.FailureHandler() {
 					public void handleFailure(String reason) {
 						final String reason2 = reason;
-                        progressDialog.dismiss();
+                        //progressDialog.dismiss();
 						errorDialog.show("Cannot connect to concert WiFi: " + reason2);
 						errorDialog.dismiss();
 						finish();
 					}
 				}, new WifiChecker.ReconnectionHandler() {
 					public boolean doReconnection(String from, String to) {
-                        progressDialog.dismiss();
+                        //progressDialog.dismiss();
 						if (from == null) {
 							wifiDialog.setMessage("To interact with this master, you must connect to " + to
                                     + "\nDo you want to connect to " + to + "?");
@@ -577,11 +579,13 @@ public class Test extends RosActivity {
 									+ "\nDo you want to switch from " + from + " to " + to + "?");
 						}
 
-                        progressDialog.show("Checking...", "Switching wifi networks");
+                        //progressDialog.show("Checking...", "Switching wifi networks");
+                        Log.i("Test", "Checking... Switching wifi networks");
 						return wifiDialog.show();
 					}
 				});
-		progressDialog.show("Connecting...", "Checking wifi connection");
+		//progressDialog.show("Connecting...", "Checking wifi connection");
+        Log.i("Test", "Connecting... Checking wifi connection");
 		wc.beginChecking(id, (WifiManager) getSystemService(WIFI_SERVICE));
 	}
 
@@ -605,8 +609,23 @@ public class Test extends RosActivity {
 
 			}
 		});
-*/
-		Log.d("Test", "app list gridview updated");
+*/      for(int i = 0; i < apps.size(); i++) {
+            Log.i("Test", "apps_index: " + i + " " + apps.get(i).getDisplayName());
+            if(apps.get(i).getDisplayName().equals("Random Walker")) {
+                selectedInteraction = apps.get(i);
+                interactionsManager.requestAppUse(roconDescription.getMasterId(), role, selectedInteraction);
+                statusPublisher.update(true, selectedInteraction.getHash(), selectedInteraction.getName());
+            }
+
+        }
+        try {
+            Thread.sleep(20000);
+        }catch (InterruptedException e){
+            e.printStackTrace();
+        }finally {
+            statusPublisher.update(false, selectedInteraction.getHash(), selectedInteraction.getName());
+        }
+        Log.d("Test", "app list gridview updated");
 	}
 
     /**
